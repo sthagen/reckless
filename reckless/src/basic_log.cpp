@@ -21,6 +21,7 @@
  */
 #include <reckless/basic_log.hpp>
 #include <reckless/detail/platform.hpp>
+#include <reckless/detail/trace_log.hpp>
 
 #include <vector>
 #include <algorithm>    // max, min
@@ -38,6 +39,87 @@ namespace {
 // wait for more than one second.
 unsigned max_input_buffer_poll_period_ms = 1000u;
 unsigned input_buffer_poll_period_inverse_growth_factor = 4;
+
+struct output_worker_start_event
+{
+    std::string format() const
+    {
+        return "output_worker_start";
+    }
+};
+
+struct wait_for_input_event
+{
+    std::string format() const
+    {
+        return "wait_for_input";
+    }
+};
+
+struct acquire_frame_event
+{
+    std::string format() const
+    {
+        return "acquire_frame";
+    }
+};
+
+struct process_frame_event
+{
+    std::string format() const
+    {
+        return "process_frame";
+    }
+};
+
+struct skip_frame_event
+{
+    std::string format() const
+    {
+        return "skip_frame";
+    }
+};
+
+struct clear_frame_event
+{
+    std::string format() const
+    {
+        return "clear_frame";
+    }
+};
+
+struct flush_output_buffer_start_event
+{
+    std::string format() const
+    {
+        return "flush_output_buffer_start";
+    }
+};
+
+struct flush_output_buffer_finish_event
+{
+    std::string format() const
+    {
+        return "flush_output_buffer_finish";
+    }
+};
+
+struct wait_input_buffer_full_event
+{
+    std::string format() const
+    {
+        return "wait_input_buffer_full";
+    }
+};
+
+struct wait_input_buffer_full_done_event
+{
+    std::string format() const
+    {
+        return "wait_input_buffer_full_done";
+    }
+};
+
 }   // anonymous namespace
 
 char const* writer_error::what() const noexcept
@@ -74,8 +156,15 @@ void basic_log::open(writer* pwriter,
     // misalignment.
     unsigned const assumed_disk_sector_size = 8192;
 
+    // We used to use the page size for input buffer capacity. However, after
+    // introducing the new ring buffer for Windows support, it is impossible to
+    // have a size less than 64 KiB on Windows due to granularity constraints.
+    // Additionally, since we are storing the entire input frame in this buffer
+    // and have stricter alignment requests, we need a larger buffer to fit
+    // a reasonable amount of frames.  So, for better performance and more
+    // similar behavior between Unix/Windows, we set this to 64 KiB.
     if(input_buffer_capacity == 0)
-        input_buffer_capacity = detail::get_page_size();
+        input_buffer_capacity = 64*1024;
     if(output_buffer_capacity == 0)
         output_buffer_capacity =  assumed_disk_sector_size;
 
@@ -235,6 +324,7 @@ detail::frame_header* basic_log::push_input_frame_slow_path(
 void basic_log::output_worker()
 {
     using namespace detail;
+    RECKLESS_TRACE(output_worker_start_event);
 
     // This code is compiled into a static library, whereas write() is inlined
     // and compiled in the client application's environment.
@@ -318,6 +408,7 @@ void basic_log::output_worker()
 
 std::size_t basic_log::wait_for_input()
 {
+    RECKLESS_TRACE(wait_for_input_event);
     auto size = input_buffer_.size();
     if(likely(size != 0)) {
         // It's not exactly *likely* that there is input in the buffer, but we
@@ -344,6 +435,7 @@ std::size_t basic_log::wait_for_input()
         }
 
         input_buffer_empty_event_.signal();
+        RECKLESS_TRACE(wait_input_buffer_full_event);
         input_buffer_full_event_.wait(wait_time_ms);
         size = input_buffer_.size();
         if(size != 0)
@@ -357,6 +449,7 @@ std::size_t basic_log::wait_for_input()
 
 detail::frame_status basic_log::acquire_frame(void* pframe)
 {
+    RECKLESS_TRACE(acquire_frame_event);
     using namespace detail;
     auto pheader = static_cast<frame_header*>(pframe);
     auto status = atomic_load_acquire(&pheader->status);
@@ -383,6 +476,7 @@ detail::frame_status basic_log::acquire_frame(void* pframe)
 
 std::size_t basic_log::process_frame(void* pframe)
 {
+    RECKLESS_TRACE(process_frame_event);
     using namespace detail;
     auto pheader = static_cast<frame_header*>(pframe);
     auto pdispatch = pheader->pdispatch_function;
@@ -417,6 +511,7 @@ std::size_t basic_log::process_frame(void* pframe)
 
 std::size_t basic_log::skip_frame(void* pframe)
 {
+    RECKLESS_TRACE(skip_frame_event);
     using namespace detail;
     auto pdispatch = static_cast<frame_header*>(pframe)->pdispatch_function;
     std::type_info const* pti;
@@ -425,6 +520,7 @@ std::size_t basic_log::skip_frame(void* pframe)
 
 void basic_log::clear_frame(void* pframe, std::size_t frame_size)
 {
+    RECKLESS_TRACE(clear_frame_event);
     using namespace detail;
     auto pcframe = static_cast<char*>(pframe);
     for(std::size_t offset=0; offset!=frame_size;
@@ -437,6 +533,7 @@ void basic_log::clear_frame(void* pframe, std::size_t frame_size)
 
 void basic_log::flush_output_buffer()
 {
+    RECKLESS_TRACE(flush_output_buffer_start_event);
     try {
         output_buffer::flush();
     } catch(flush_error const&) {
@@ -447,6 +544,7 @@ void basic_log::flush_output_buffer()
         // when it happens during formatting of an input frame,
         // because then we need to account for a lost frame.
     }
+    RECKLESS_TRACE(flush_output_buffer_finish_event);
 }
 
 void basic_log::on_panic_flush_done()
