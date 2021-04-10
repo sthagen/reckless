@@ -1,5 +1,5 @@
 /* This file is part of reckless logging
- * Copyright 2015, 2016 Mattias Flodin <git@codepentry.com>
+ * Copyright 2015-2020 Mattias Flodin <git@codepentry.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -25,7 +25,8 @@
 
 class ucs2_log : public reckless::basic_log {
 public:
-    ucs2_log(reckless::writer* pwriter) : basic_log(pwriter) {}
+    using basic_log::basic_log;
+
     void puts(std::wstring const& s)
     {
         basic_log::write<ucs2_formatter>(s);

@@ -5,7 +5,7 @@ from sys import argv, stderr, stdout
 from getopt import gnu_getopt
 import numpy as np
 
-ALL_LIBS = ['nop', 'reckless', 'stdio', 'fstream', 'pantheios', 'spdlog']
+ALL_LIBS = ['nop', 'reckless', 'stdio', 'fstream', 'boost_log', 'spdlog', 'g3log']
 ALL_TESTS = ['periodic_calls', 'call_burst', 'write_files', 'mandelbrot']
 THREADED_TESTS = {'call_burst', 'mandelbrot'}
 
@@ -50,7 +50,7 @@ def main():
             'Available tests: {}\n'.format(
                 ','.join(ALL_LIBS), ','.join(ALL_TESTS)))
         return 1
-    
+
     if libs is None:
         libs = sorted(ALL_LIBS)
     if tests is None:
@@ -76,15 +76,24 @@ def parse_ranges(s):
         start, end = min(start, end), max(start, end)
         result.extend(list(range(start, end+1)))
     return result
-        
+
 def make_stats(libs, tests, threads_list, normalizer=None, offset=None, precision=None):
     def single_file_stats(filename, columns):
         with open(filename, 'r') as f:
-            data = f.readlines()
-        data = np.array([float(x) for x in data])
-        mean = np.mean(data)
+            lines = f.readlines()
+        data = []
+        for line in lines:
+            assert line.endswith('\n')
+            numbers = line[:-1].split(' ')
+            numbers = [int(n) for n in numbers]
+            if len(numbers) == 1:
+                data.append(numbers[0])
+            else:
+                data.append(numbers[1] - numbers[0])
         if offset is not None:
-            mean -= offset
+            data = [x - offset for x in data]
+        data = np.array(data)
+        mean = np.mean(data)
         if normalizer is not None:
             mean = mean/normalizer
             data = [x/normalizer for x in data]
@@ -99,7 +108,7 @@ def make_stats(libs, tests, threads_list, normalizer=None, offset=None, precisio
             cols = [fmt % x for x in cols]
         columns.extend(cols)
         return mean
-    
+
     rows = []
     for test in tests:
         for lib in libs:
@@ -110,18 +119,18 @@ def make_stats(libs, tests, threads_list, normalizer=None, offset=None, precisio
             if test in THREADED_TESTS:
                 for threads in threads_list:
                     name = base_name[:]
-                    filename = "results/%s_%s_%d.txt" % (lib, test, threads)
+                    filename = "results/%s-%s-%d.txt" % (test, lib, threads)
                     mean = single_file_stats(filename, columns)
             else:
-                filename = "results/%s_%s.txt" % (lib, test)
+                filename = "results/%s-%s.txt" % (test, lib)
                 mean = single_file_stats(filename, columns)
             rows.append((mean, columns))
-    
+
     rows = [r for _, r in sorted(rows)]
     rows.insert(0, ["Library", "Ticks", "IQR", "MAD", "Std deviation"])
     if normalizer is not None:
         rows[0][1] = "Relative time"
-    
+
     colwidths = [0]*len(rows[0])
     for row in rows:
         widths = [len(x) for x in row]

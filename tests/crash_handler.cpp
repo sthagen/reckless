@@ -1,5 +1,5 @@
 /* This file is part of reckless logging
- * Copyright 2015, 2016 Mattias Flodin <git@codepentry.com>
+ * Copyright 2015-2020 Mattias Flodin <git@codepentry.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -23,6 +23,8 @@
 #include <reckless/file_writer.hpp>
 #include <reckless/crash_handler.hpp>
 
+#include <thread>
+
 reckless::policy_log<> g_log;
 
 int main()
@@ -30,6 +32,7 @@ int main()
     reckless::scoped_crash_handler crash_handler({&g_log});
     reckless::file_writer writer("log.txt");
     g_log.open(&writer);
+    std::this_thread::sleep_for(std::chrono::seconds(2));
     g_log.write("Hello World!");
     char* p = nullptr;
     *p = 0;

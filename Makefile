@@ -5,18 +5,5 @@
 # here to build performance tests and other cruft. You need to use tup for all
 # of that.
 
-CXXFLAGS = -std=c++11 -Wall -Wextra -O3 -g -isystem boost -Ireckless/include
-
-target = reckless/lib/libreckless.a
-srcpath = reckless/src
-objects := $(patsubst %.cpp,%.o,$(wildcard $(srcpath)/*.cpp))
-
-.PHONY: clean
-
-$(target): $(objects)
-	-$(RM) $(target)
-	ar rs $(target) $(objects)
-
-clean:
-	-$(RM) $(target)
-	$(RM) $(srcpath)/*.o
+CXXFLAGS = -std=c++11 -Wall -Wextra -O3 -DNDEBUG
+include Makefile.conan

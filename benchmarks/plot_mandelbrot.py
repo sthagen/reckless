@@ -10,13 +10,24 @@ matplotlib.rc('font', size=10)
 
 # color palette from colorbrewer2.org
 COLORS = [
-    '#8dd3c7',
-    '#fb8072',
-    '#80b1d3',
-    '#ffffb3',
-    '#bebada',
-    '#fdb462',
-]
+    '#a6cee3',
+    '#1f78b4',
+    '#b2df8a',
+    '#33a02c',
+    '#fb9a99',
+    '#e31a1c',
+    '#fdbf6f'
+    ]
+#COLORS = [
+#    '#8dd3c7',
+#    '#fb8072',
+#    '#80b1d3',
+#    #'#ffffb3', # this is too bright for white background
+#    '#bebada',
+#    '#fdb462',
+#    '#b3de69',
+#    '#fccde5'
+#]
 
 filename = None
 if len(argv) > 1:
@@ -27,12 +38,13 @@ if len(argv) > 1:
 fig, ax = plt.subplots()
 
 ONLY_OVERHEAD = 1
+SCALE = 1000000.0/(1024*1024)
 #LOG_LINES = 1048576
-MAX_CORES = 4
-LIBS = ['nop', 'reckless', 'spdlog', 'stdio', 'fstream', 'pantheios']
+MAX_CORES = 8
+LIBS = ['nop', 'reckless', 'spdlog', 'g3log', 'stdio', 'fstream', 'boost_log']
 #LIBS = ['nop', 'reckless', 'stdio', 'fstream']
 if ONLY_OVERHEAD:
-    del COLORS[0]
+    del COLORS[-1]
     del LIBS[0]
 ind = np.arange(MAX_CORES)
 WIDTH=1.0/(len(LIBS)+2)
@@ -40,12 +52,12 @@ GROUP_WIDTH = WIDTH*len(LIBS)
 GROUP_OFFSET = (1.0 - GROUP_WIDTH)/2
 
 def read_timing(lib, cores, offset=0.0):
-    with open(os.path.join('results', '%s_mandelbrot_%d.txt' % (lib, cores)), 'r') as f:
+    with open(os.path.join('results', 'mandelbrot-%s-%d.txt' % (lib, cores)), 'r') as f:
         data = f.readlines()
     data = sorted([float(x)/1000.0+offset for x in data])
     # Use interquartile range as measure of scale.
     low, high = np.percentile(data, [25, 75])
-    
+
     # Samples generally center around a minimum point that represents the ideal
     # running time. There are no outliers below the ideal time; execution does
     # not accidentally take some kind of short cut. At least, not for this
@@ -77,9 +89,10 @@ rects = []
 for index, lib in enumerate(LIBS):
     means = []
     error = [[], []]
-    
+
     for cores in range(1, MAX_CORES+1):
-        low, mean, high = read_timing(lib, cores, offsets[cores-1]) 
+        low, mean, high = read_timing(lib, cores, offsets[cores-1])
+        low, mean, high = low*SCALE, mean*SCALE, high*SCALE
         print(lib, cores, mean, low, high)
         means.append(mean)
         error[0].append(mean - low)
@@ -94,14 +107,14 @@ for index, lib in enumerate(LIBS):
 ax.legend( rects, LIBS )
 
 if ONLY_OVERHEAD:
-    ax.set_ylabel('Seconds overhead')
+    ax.set_ylabel('Average call latency (microseconds)')
 else:
     ax.set_ylabel('Total seconds')
 ax.set_xlabel('Number of worker threads')
 ax.set_xticks(ind + GROUP_OFFSET + GROUP_WIDTH/2)
 ax.set_xticklabels([str(x) for x in range(1, MAX_CORES+1)])
 #ax.set_title('1024x1024 mandelbrot set render, one log line per pixel (i.e. 1.05 million log lines)')
-    
+
 if filename is None:
     plt.show()
 else:
